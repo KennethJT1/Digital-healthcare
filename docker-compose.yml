@@ -1,44 +1,51 @@
-# version: '3.8'
-# services:
-#   app:
-#     build: .
-#     ports:
-#       - '3000:3000'
-#     depends_on:
-#       - postgres
-#       - mongo
-#   postgres:
-#     image: postgres:13
-#     environment:
-#       POSTGRES_USER: postgres
-#       POSTGRES_PASSWORD: password
-#       POSTGRES_DB: digital_healthcare
-#     ports:
-#       - '5432:5432'
-#   mongo:
-#     image: mongo:5
-#     ports:
-#       - '27017:27017'
-version: '3'
+version: "3.8"
+
 services:
   app:
-    build: .
+    image: digital-healthcare:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "${PORT}:6789"
     environment:
-      - JWT_SECRET_KEY=your-secret-key
-      - POSTGRES_HOST=postgres
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=health
+      - PORT=${PORT}
+      - DBCONNECTION_STRING=${DBCONNECTION_STRING}
+      - MONGO_URI=${MONGO_URI}
+      - URL=${URL}
+      - BCRYPT_SALT_ROUNDS=${BCRYPT_SALT_ROUNDS}
+      - JWT_SECRET=${JWT_SECRET}
+      - EXPIRESIN=${EXPIRESIN}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - NODE_ENV=${NODE_ENV}
+    volumes:
+      - .:/app
+    command: ["yarn", "start"]
     depends_on:
       - postgres
-      - mongodb
+      - mongo
+    restart: "no"
+
   postgres:
     image: postgres:latest
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=health
-  mongodb:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: digital-healthcare
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: "no"
+
+  mongo:
     image: mongo:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: "no"
+
+volumes:
+  postgres_data:
+  mongo_data:

@@ -45,6 +45,7 @@ Appointment.init(
     status: {
       type: DataTypes.STRING,
       allowNull: false,
+      values: ['pending', 'accepted', 'rejected'],
       defaultValue: "pending",
     },
     testType: {

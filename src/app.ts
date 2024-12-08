@@ -22,7 +22,7 @@ db.sync()
     console.log(err);
   });
 
-// connectedDB();
+connectedDB();
 
 const app: Application = express();
 

@@ -1,9 +1,10 @@
 import mongoose from "mongoose";
 import { Sequelize } from "sequelize";
 import dotenv from "dotenv";
+
 dotenv.config();
 
-const isProduction = process.env.NODE_ENV === 'production';
+const isProduction = process.env.NODE_ENV === "production";
 
 export const db = new Sequelize(process.env.DBCONNECTION_STRING!, {
   logging: false,
@@ -12,12 +13,12 @@ export const db = new Sequelize(process.env.DBCONNECTION_STRING!, {
     ? {
         ssl: {
           require: true,
-          rejectUnauthorized: false
-        }
+          rejectUnauthorized: false,
+        },
       }
     : {
-        ssl: false
-      }
+        ssl: false,
+      },
 });
 
 const database = process.env.MONGO_URI;
@@ -30,8 +31,11 @@ export const connectedDB = async () =>
     .then(() => console.log("MONGODB Database connected"))
     .catch((err: any) => console.error("DB-disconnected" + err.message));
 
+
 export const URL = process.env.URL as string;
 export const port = process.env.PORT || 4000;
 export const SALT_ROUNDS = parseInt(process.env.BCRYPT_SALT_ROUNDS!);
 export const JWT_SECRET = process.env.JWT_SECRET!;
 export const EXPIRESIN = process.env.EXPIRESIN!;
+export const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
+export const CLOUDINARY_URL = process.env.CLOUDINARY_URL!;

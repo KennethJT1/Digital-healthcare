@@ -4,6 +4,7 @@ import jwt, { JwtPayload } from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import moment from "moment";
 import { Op } from "sequelize";
+import { OpenAI } from "openai";
 
 import {
   appointmentSchema,
@@ -13,9 +14,113 @@ import {
   updateProfileSchema,
 } from "../utils/validation";
 import User from "../models/userModel";
-import { EXPIRESIN, JWT_SECRET, SALT_ROUNDS } from "../config";
+import { EXPIRESIN, JWT_SECRET, OPENAI_API_KEY, SALT_ROUNDS } from "../config";
 import Doctor from "../models/doctorModel";
 import Appointment from "../models/doctorAppointmentModel";
+import { MedicalRecord } from "../models/MedicalRecordModel";
+
+const openai = new OpenAI({
+  apiKey: OPENAI_API_KEY,
+});
+
+const RATE_LIMITS: Record<
+  string,
+  { rpm: number; rpd: number; tpm: number; batchQueueLimit: number }
+> = {
+  "gpt-3.5-turbo": {
+    rpm: 3,
+    rpd: 200,
+    tpm: 40000,
+    batchQueueLimit: 200000,
+  },
+};
+
+let requestCount: Record<
+  string,
+  { rpm: number; rpd: number; tpm: number; lastRequestTime: number }
+> = {
+  "gpt-3.5-turbo": {
+    rpm: 0,
+    rpd: 0,
+    tpm: 0,
+    lastRequestTime: Date.now(),
+  },
+};
+
+const checkRateLimit = (
+  model: string,
+  tokensUsed: number
+): { allowed: boolean; message?: string } => {
+  const currentTime: number = Date.now();
+  const currentMinute: number = Math.floor(currentTime / 60000);
+
+  if (
+    Math.floor(requestCount[model].lastRequestTime / 60000) !== currentMinute
+  ) {
+    requestCount[model].rpm = 0;
+    requestCount[model].lastRequestTime = currentTime;
+  }
+
+  requestCount[model].rpm += 1;
+  requestCount[model].tpm += tokensUsed;
+
+  if (requestCount[model].rpm > RATE_LIMITS[model].rpm) {
+    return {
+      allowed: false,
+      message: "Rate limit exceeded for requests per minute.",
+    };
+  }
+  if (requestCount[model].tpm > RATE_LIMITS[model].tpm) {
+    return {
+      allowed: false,
+      message: "Rate limit exceeded for tokens per minute.",
+    };
+  }
+
+  return { allowed: true };
+};
+
+export const virtualAssistant = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
+  const { message }: { message?: string } = req.body;
+
+  if (!message) {
+    return res.status(400).json({ message: "Message is required" });
+  }
+
+  try {
+    const tokensUsed: number = message.length * 2;
+
+    const rateLimitStatus = checkRateLimit("gpt-3.5-turbo", tokensUsed);
+    if (!rateLimitStatus.allowed) {
+      return res.status(429).json({ message: rateLimitStatus.message });
+    }
+
+    const response: unknown = await openai.chat.completions.create({
+      messages: [{ role: "user", content: message }],
+      model: "gpt-3.5-turbo",
+    });
+
+    const assistantResponse = (
+      response as { choices: Array<{ message: { content: string } }> }
+    ).choices[0].message.content;
+
+    return res.status(200).json({
+      assistantResponse,
+    });
+  } catch (error: unknown) {
+    console.error("Error in virtual assistant:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error occurred";
+
+    return res.status(500).json({
+      message: "Internal server error",
+      error: errorMessage,
+    });
+  }
+};
 
 export const register = async (req: Request, res: Response): Promise<any> => {
   const { error, value } = registerSchema.validate(req.body, {
@@ -174,7 +279,7 @@ export const updateProfile = async (
   }
 };
 
-export const applyForADoctor = async (
+export const applyToBeADoctor = async (
   req: JwtPayload,
   res: Response
 ): Promise<any> => {
@@ -352,50 +457,6 @@ export const bookAppointmentWithADoctor = async (
   }
 };
 
-export const bookingAvailability = async (
-  req: Request,
-  res: Response
-): Promise<any> => {
-  try {
-    const date = moment(req.body.date, "DD-MM-YY").toISOString();
-    const fromTime = moment(req.body.time, "HH:mm")
-      .subtract(1, "hours")
-      .toISOString();
-    const toTime = moment(req.body.time, "HH:mm").add(1, "hours").toISOString();
-
-    const doctorId = req.body.doctorId;
-
-    const appointments = await Appointment.findAll({
-      where: {
-        doctorId,
-        date,
-        time: {
-          [Op.gte]: fromTime,
-          [Op.lte]: toTime,
-        },
-      },
-    });
-
-    if (appointments.length > 0) {
-      return res.status(200).send({
-        message: "Appointments not Available at this time",
-        success: true,
-      });
-    } else {
-      return res.status(200).send({
-        success: true,
-        message: "Appointments available",
-      });
-    }
-  } catch (error: any) {
-    console.log(error);
-    res.status(500).send({
-      success: false,
-      message: `BookingAvailability User_Controller ${error.message}`,
-    });
-  }
-};
-
 export const userAppointment = async (req: JwtPayload, res: Response) => {
   try {
     const appointments = await Appointment.findOne({
@@ -413,6 +474,43 @@ export const userAppointment = async (req: JwtPayload, res: Response) => {
     res.status(500).send({
       success: false,
       message: `UserAppointment User_Controller ${error.message}`,
+    });
+  }
+};
+
+export const getMedicalHistory = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  try {
+    const patientId = req.user;
+
+    const user = await User.findOne({ where: { id: patientId } });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const myMedicalHistory = await MedicalRecord.find({
+      where: { patientId },
+    });
+
+    if (!myMedicalHistory || myMedicalHistory.length === 0) {
+      return res.status(404).json({ message: "Medical history not found" });
+    }
+
+    const formattedRecords = myMedicalHistory.map((record) => ({
+      records: record.records,
+      date: record.date,
+    }));
+
+    return res.status(200).json({
+      medicalHistory: formattedRecords,
+    });
+  } catch (error: unknown) {
+    console.error("Error retrieving medical history:", error);
+    return res.status(500).json({
+      message: "Internal server error",
+      error: error instanceof Error ? error.message : "Unknown error",
     });
   }
 };

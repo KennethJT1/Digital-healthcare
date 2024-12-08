@@ -1,17 +1,25 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema, Document } from "mongoose";
 
 interface IMedicalRecord extends Document {
-  userId: number;
-  record: string;
-  createdAt: Date;
+  patientId: string;
+  appointmentId: string;
+  doctorId: string;
+  records: string[];
+  date: Date;
 }
 
-const medicalRecordSchema = new Schema<IMedicalRecord>(
-  {
-    userId: { type: Number, required: true },
-    record: { type: String, required: true },
-    createdAt: { type: Date, default: Date.now }
-  }
-);
+const medicalRecordSchema = new Schema<IMedicalRecord>({
+  patientId: { type: String, required: true },
+  doctorId: { type: String, required: true },
+  appointmentId: { type: String, required: true },
+  records: {
+    type: [String],
+    required: true,
+  },
+  date: { type: Date, default: Date.now },
+});
 
-export const MedicalRecord = mongoose.model<IMedicalRecord>('MedicalRecord', medicalRecordSchema);
+export const MedicalRecord = mongoose.model<IMedicalRecord>(
+  "MedicalRecord",
+  medicalRecordSchema
+);

@@ -53,10 +53,11 @@ export const updateDoctorSchema = Joi.object({
   specialization: Joi.array().items(Joi.string()).optional(),
   experience: Joi.string().optional(),
   feesPerConsultation: Joi.number().optional(),
-  status: Joi.string().valid('pending', 'approved').optional(),
+  status: Joi.string().valid("pending", "approved").optional(),
   timings: Joi.object().optional(),
 });
 
-
-  
-
+export const medicalHistorySchema = Joi.object({
+  appointmentId: Joi.string().required(),
+  date: Joi.date().iso().required(),
+});
