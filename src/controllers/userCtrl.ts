@@ -181,22 +181,46 @@ export const login = async (req: Request, res: Response): Promise<any> => {
   try {
     const { email, password } = value;
 
-    // Find user by email
     const user = await User.findOne({ where: { email } });
     if (!user) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    // Compare passwords
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    // Generate JWT
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
-      expiresIn: EXPIRESIN,
-    });
+    if (user.isDoctor) {
+      const doctor = await Doctor.findOne({ where: { userId: user.id } });
+      if (!doctor) {
+        return res.status(404).json({ message: "Doctor record not found" });
+      }
+
+      const token = jwt.sign(
+        { id: doctor.id, email: user.email, role: "doctor" },
+        JWT_SECRET,
+        { expiresIn: EXPIRESIN }
+      );
+
+      return res.status(200).json({ message: "Login successful", token });
+    }
+
+    if (user.role === "admin") {
+      const token = jwt.sign(
+        { id: user.id, email: user.email, role: "admin" },
+        JWT_SECRET,
+        { expiresIn: EXPIRESIN }
+      );
+
+      return res.status(200).json({ message: "Login successful", token });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: "user" },
+      JWT_SECRET,
+      { expiresIn: EXPIRESIN }
+    );
 
     return res.status(200).json({ message: "Login successful", token });
   } catch (err: any) {
@@ -272,68 +296,6 @@ export const updateProfile = async (
     return res
       .status(200)
       .json({ message: "Profile updated successfully", user });
-  } catch (err: any) {
-    return res
-      .status(500)
-      .json({ message: "Internal server error", error: err.message });
-  }
-};
-
-export const applyToBeADoctor = async (
-  req: JwtPayload,
-  res: Response
-): Promise<any> => {
-  const { error, value } = doctorValidationSchema.validate(req.body, {
-    abortEarly: false,
-  });
-
-  if (error) {
-    const formattedErrors = error.details.map((err: any) => ({
-      field: err.context.key,
-      message: err.message,
-    }));
-    return res.status(400).json({ errors: formattedErrors });
-  }
-  try {
-    const user = await User.findOne({ where: { id: req.user } });
-    if (!user) {
-      return res.status(404).json({
-        message: "User not found",
-        success: false,
-      });
-    }
-
-    const {
-      firstName,
-      lastName,
-      phone,
-      email,
-      website,
-      address,
-      specialization,
-      experience,
-      feesPerConsultation,
-      timings,
-    } = value;
-
-    const doctor = await Doctor.create({
-      id: uuidv4(),
-      userId: user.id,
-      firstName,
-      lastName,
-      phone,
-      email,
-      website,
-      address,
-      specialization,
-      experience,
-      feesPerConsultation,
-      timings,
-    });
-
-    return res
-      .status(201)
-      .json({ message: "Doctor account successfully created", doctor });
   } catch (err: any) {
     return res
       .status(500)
@@ -478,20 +440,99 @@ export const userAppointment = async (req: JwtPayload, res: Response) => {
   }
 };
 
+export const applyToBeADoctor = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  const { error, value } = doctorValidationSchema.validate(req.body, {
+    abortEarly: false,
+  });
+
+  if (error) {
+    const formattedErrors = error.details.map((err: any) => ({
+      field: err.context.key,
+      message: err.message,
+    }));
+    return res.status(400).json({ errors: formattedErrors });
+  }
+
+  try {
+    const user = await User.findOne({ where: { id: req.user } });
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+        success: false,
+      });
+    }
+
+    const {
+      firstName,
+      lastName,
+      phone,
+      email,
+      website,
+      address,
+      specialization,
+      experience,
+      feesPerConsultation,
+      timings,
+    } = value;
+
+    const existingDoctor = await Doctor.findOne({
+      where: {
+        firstName,
+        lastName,
+        phone,
+        email,
+        website,
+      },
+    });
+
+    if (existingDoctor) {
+      return res.status(400).json({
+        message: "Doctor profile with these details already exists",
+        success: false,
+      });
+    }
+
+    const doctor = await Doctor.create({
+      id: uuidv4(),
+      userId: user.id,
+      firstName,
+      lastName,
+      phone,
+      email,
+      website,
+      address,
+      specialization,
+      experience,
+      feesPerConsultation,
+      timings,
+    });
+
+    return res
+      .status(201)
+      .json({ message: "Doctor account successfully created", doctor });
+  } catch (err: any) {
+    return res
+      .status(500)
+      .json({ message: "Internal server error", error: err.message });
+  }
+};
+
 export const getMedicalHistory = async (
   req: JwtPayload,
   res: Response
 ): Promise<any> => {
   try {
     const patientId = req.user;
-
     const user = await User.findOne({ where: { id: patientId } });
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
     const myMedicalHistory = await MedicalRecord.find({
-      where: { patientId },
+      patientId: patientId,
     });
 
     if (!myMedicalHistory || myMedicalHistory.length === 0) {

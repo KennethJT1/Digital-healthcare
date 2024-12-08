@@ -73,7 +73,7 @@ Doctor.init(
       allowNull: false,
     },
     status: {
-      type: DataTypes.STRING,
+      type: DataTypes.ENUM('pending', 'rejected', 'approved'),
       allowNull: false,
       defaultValue: "pending",
     },

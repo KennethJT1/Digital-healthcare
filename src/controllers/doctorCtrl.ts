@@ -4,15 +4,15 @@ import Doctor from "../models/doctorModel";
 import Appointment from "../models/doctorAppointmentModel";
 import { medicalHistorySchema, updateDoctorSchema } from "../utils/validation";
 import User from "../models/userModel";
-import upload from "../utils/multer";
 import { MedicalRecord } from "../models/MedicalRecordModel";
+import cloudinary from "cloudinary";
 
 export const doctorInfo = async (
   req: JwtPayload,
   res: Response
 ): Promise<any> => {
   try {
-    const doctor = await Doctor.findOne({ where: { userId: req.user } });
+    const doctor = await Doctor.findOne({ where: { id: req.user.id} });
 
     if (!doctor) {
       return res.status(404).json({
@@ -64,7 +64,7 @@ export const updateInfo = async (
       timings,
     } = value;
 
-    const doctor = await Doctor.findOne({ where: { userId: req.user } });
+    const doctor = await Doctor.findOne({ where: { id: req.user.id } });
     if (!doctor) {
       return res.status(404).json({ message: "Doctor not found" });
     }
@@ -109,7 +109,7 @@ export const appointDoctor = async (
   res: Response
 ): Promise<any> => {
   try {
-    const doctor = await Doctor.findOne({ where: { userId: req.user } });
+    const doctor = await Doctor.findOne({ where: { id: req.user.id } });
 
     if (!doctor) {
       return res.status(404).json({
@@ -154,7 +154,8 @@ export const acceptAppointment = async (
         success: false,
       });
     }
-    if (appointment.doctorId !== req.user) {
+
+    if (appointment.doctorId !== req.user.id) {
       return res.status(403).json({
         message: "You are not authorized to accept this appointment",
         success: false,
@@ -206,7 +207,7 @@ export const rejectAppointment = async (
       });
     }
 
-    if (appointment.doctorId !== req.user) {
+    if (appointment.doctorId !== req.user.id) {
       return res.status(403).json({
         message: "You are not authorized to reject this appointment",
         success: false,
@@ -259,7 +260,7 @@ export const uploadMedicalReport = async (
   }
 
   try {
-    const doctorId = req.user;
+    const doctorId = req.user.id;
     const fileUrl = req.file?.path;
 
     if (!fileUrl) {
@@ -267,6 +268,10 @@ export const uploadMedicalReport = async (
     }
 
     const { appointmentId } = req.body;
+
+    if (!appointmentId) {
+      return res.status(400).json({ message: "Appointment ID is required" });
+    }
 
     const appointment = await Appointment.findOne({
       where: {
@@ -289,23 +294,27 @@ export const uploadMedicalReport = async (
       medicalRecord = new MedicalRecord({
         doctorId,
         patientId,
-        records: [fileUrl],
+        records: [],
         date: new Date(),
+        appointmentId,
       });
       await medicalRecord.save();
-    } else {
-      medicalRecord.records.push(fileUrl);
-      await medicalRecord.save();
     }
+
+    const uploadedFile = await cloudinary.v2.uploader.upload(fileUrl);
+
+    const uploadedFileUrl = uploadedFile.secure_url;
+
+    medicalRecord.records.push(uploadedFileUrl);
+    await medicalRecord.save();
 
     const patient = await User.findOne({ where: { id: patientId } });
 
     if (patient) {
       const notificationMessage = {
         type: "Doctor's report",
-        message: `You have a new medical report uploaded by Dr. ${appointment
-          ?.doctorInfo?.firstName!}`,
-        onClickPath: `/medical-reports/${appointment?.userInfo?.name!}`,
+        message: `You have a new medical report uploaded by Dr. ${appointment?.doctorInfo?.firstName}`,
+        onClickPath: `/medical-reports/${appointment?.userInfo?.name}`,
       };
 
       patient.notification = [
@@ -315,21 +324,25 @@ export const uploadMedicalReport = async (
       await patient.save();
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Report uploaded successfully",
       medicalRecord,
     });
-
-    res.status(200).json({
-      success: true,
-      message: "Report uploaded successfully",
-      medicalRecord,
-    });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error uploading medical report:", error);
-    res
+
+    if (req.file && req.file.public_id) {
+      cloudinary.v2.uploader.destroy(req.file.public_id, (err:any) => {
+        if (err) {
+          console.log("Error deleting file from Cloudinary:", err.message);
+        }
+      });
+    }
+
+    return res
       .status(500)
       .json({ success: false, message: "Failed to upload report" });
   }
 };
+

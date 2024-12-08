@@ -30,8 +30,10 @@ export const doctorValidationSchema = Joi.object({
   email: Joi.string().email().required(),
   website: Joi.string().uri().allow(null, ""),
   address: Joi.string().required(),
-  specialization: Joi.string().required(),
-  experience: Joi.string().required(),
+  specialization: Joi.alternatives().try(
+    Joi.string().required(),
+    Joi.array().items(Joi.string()).min(1).required()
+  ).required(),  experience: Joi.string().required(),
   feesPerConsultation: Joi.number().positive().required(),
   timings: Joi.object().required(),
 });

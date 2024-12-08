@@ -1,6 +1,6 @@
 import express from "express";
 
-import { AuthSign } from "../middlewares";
+import { DoctorAuthSign } from "../middlewares";
 import {
   acceptAppointment,
   appointDoctor,
@@ -13,18 +13,18 @@ import upload from "../utils/multer";
 
 const doctorRouter = express.Router();
 
-doctorRouter.get("/doctor_info", AuthSign, doctorInfo);
+doctorRouter.get("/doctor_info", DoctorAuthSign, doctorInfo);
 
-doctorRouter.patch("/update_doctor_info", AuthSign, updateInfo);
+doctorRouter.patch("/update_doctor_info", DoctorAuthSign, updateInfo);
 
-doctorRouter.get("/doctor_appointment", AuthSign, appointDoctor);
+doctorRouter.get("/doctor_appointment", DoctorAuthSign, appointDoctor);
 
-doctorRouter.patch("/accept-appointment", AuthSign, acceptAppointment);
-doctorRouter.delete("/reject-appointment", AuthSign, rejectAppointment);
+doctorRouter.patch("/accept-appointment", DoctorAuthSign, acceptAppointment);
+doctorRouter.delete("/reject-appointment", DoctorAuthSign, rejectAppointment);
 doctorRouter.post(
   "/upload",
-  AuthSign,
-  upload.array("file", 3),
+  DoctorAuthSign,
+  upload.single("file"),
   uploadMedicalReport
 );
 
