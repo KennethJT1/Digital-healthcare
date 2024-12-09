@@ -33,7 +33,7 @@ export const connectedDB = async () =>
 
 
 export const URL = process.env.URL as string;
-export const port = process.env.PORT || 4000;
+export const port = process.env.PORT || 4100;
 export const SALT_ROUNDS = parseInt(process.env.BCRYPT_SALT_ROUNDS!);
 export const JWT_SECRET = process.env.JWT_SECRET!;
 export const EXPIRESIN = process.env.EXPIRESIN!;
